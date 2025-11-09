@@ -158,12 +158,6 @@ function App() {
       <main className="w-full max-w-4xl mx-auto flex flex-col items-center">
         {/* Header */}
         <header className="text-center my-8">
-          <h2 className="text-xl font-bold tracking-[0.3em] text-slate-400 uppercase mb-4">
-            MEGAPOST
-          </h2>
-          <div className="inline-block bg-gradient-to-r from-cyan-400 to-blue-500 p-3 rounded-full mb-4">
-              <SparklesIcon className="w-10 h-10 text-white" />
-          </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-300 to-blue-400 text-transparent bg-clip-text">
             Otimizador de Anúncios IA
           </h1>
