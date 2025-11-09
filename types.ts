@@ -1,3 +1,8 @@
+export interface GroundingSource {
+    uri: string;
+    title: string;
+}
+
 export interface OptimizedAdResponse {
   optimizedTitle: string;
   optimizedDescription: string;
@@ -5,4 +10,5 @@ export interface OptimizedAdResponse {
   persuasionScore: string;
   clarityScore: string;
   imageSuggestion: string;
+  sources?: GroundingSource[];
 }

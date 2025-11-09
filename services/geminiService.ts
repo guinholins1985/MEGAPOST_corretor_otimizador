@@ -1,78 +1,84 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import type { OptimizedAdResponse } from '../types';
+import { GoogleGenAI } from "@google/genai";
+import type { OptimizedAdResponse, GroundingSource } from '../types';
 
-// Assume process.env.API_KEY is available
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// Helper to safely parse JSON from a string that might contain other text
+function extractAndParseJson(text: string): any {
+    let jsonString = text.trim();
 
-const adOptimizationSchema = {
-    type: Type.OBJECT,
-    properties: {
-        optimizedTitle: {
-            type: Type.STRING,
-            description: "O título do anúncio, reescrito para ser curto, cativante e de alto impacto.",
-        },
-        optimizedDescription: {
-            type: Type.STRING,
-            description: "O texto principal do anúncio (descrição), completamente reescrito e otimizado para persuasão, clareza e com uma forte chamada para ação (CTA).",
-        },
-        improvements: {
-            type: Type.ARRAY,
-            description: "Uma lista de pontos de destaque da criação, explicando por que os elementos do anúncio otimizado são eficazes.",
-            items: {
-                type: Type.STRING,
-            },
-        },
-        persuasionScore: {
-            type: Type.STRING,
-            description: "Uma avaliação do nível de persuasão do anúncio otimizado. Valores possíveis: 'Alto', 'Médio', 'Baixo'."
-        },
-        clarityScore: {
-            type: Type.STRING,
-            description: "Uma nota sobre a clareza geral do anúncio otimizado. Valores possíveis: 'Excelente', 'Bom', 'A Melhorar'."
-        },
-        imageSuggestion: {
-            type: Type.STRING,
-            description: "Uma recomendação estratégica para a imagem do anúncio. Descreva o tipo de imagem que seria mais eficaz (ex: 'Close-up do produto em um fundo neutro', 'Pessoa sorrindo enquanto usa o serviço')."
+    // 1. Try to find a JSON blob inside markdown ```json ... ```
+    const markdownMatch = jsonString.match(/```json\n([\s\S]*?)\n```/);
+    if (markdownMatch && markdownMatch[1]) {
+        jsonString = markdownMatch[1];
+    } else {
+        // 2. If no markdown, find the first '{' and last '}'
+        const firstBracket = jsonString.indexOf('{');
+        const lastBracket = jsonString.lastIndexOf('}');
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+            jsonString = jsonString.substring(firstBracket, lastBracket + 1);
         }
-    },
-    required: ["optimizedTitle", "optimizedDescription", "improvements", "persuasionScore", "clarityScore", "imageSuggestion"],
-};
+    }
+
+    try {
+        return JSON.parse(jsonString);
+    } catch (e) {
+        console.error("Failed to parse JSON from response. Raw text:", text);
+        console.error("Attempted to parse:", jsonString);
+        // The error will be caught by the calling function's catch block
+        throw new Error("A resposta da IA não estava em um formato JSON válido.");
+    }
+}
 
 export const optimizeAd = async (productUrl: string): Promise<OptimizedAdResponse> => {
+    // This check is important. If it fails, the app won't even try to call the API.
+    // On Vercel, env vars must be configured in the project settings.
+    if (!process.env.API_KEY) {
+        throw new Error("A chave de API do Google não foi encontrada. Configure a variável de ambiente API_KEY nas configurações do seu projeto Vercel.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
     try {
         const prompt = `
-            Você é um especialista em marketing digital e copywriting com anos de experiência em criar anúncios de alta conversão a partir do zero.
-            O usuário forneceu apenas a URL de um produto: ${productUrl}.
+            Você é um especialista em marketing digital e copywriting. Sua tarefa é analisar a URL de um produto, pesquisar na web para entendê-lo e, em seguida, criar um anúncio completo e otimizado.
 
-            Sua tarefa é:
-            1.  **Analisar a URL:** Inferir qual é o produto e seu público-alvo a partir da URL.
-            2.  **Criar um Título Otimizado:** Crie um título magnético, curto, e de alto impacto para este produto.
-            3.  **Criar uma Descrição Otimizada:** Escreva uma descrição de anúncio completamente nova e otimizada. O texto deve ser altamente persuasivo, claro, destacar os principais benefícios e terminar com uma forte chamada para ação (CTA).
-            4.  **Sugerir a Imagem Ideal:** Baseado na sua inferência sobre o produto, forneça uma SUGESTÃO ESTRATÉGICA sobre o tipo de imagem que teria o melhor desempenho para este anúncio. Seja descritivo (ex: "Uma foto de alta qualidade mostrando o produto em uso por uma pessoa feliz", "Um gráfico limpo destacando o principal benefício", etc.).
-            5.  **Listar Pontos de Destaque:** Em vez de listar melhorias sobre um texto original, liste os 'Pontos de Destaque' da sua criação, explicando por que os elementos que você criou (título, CTA, etc.) são eficazes.
-            6.  **Avaliar a Criação:** Forneça um 'Nível de Persuasão' (Alto, Médio ou Baixo) e uma 'Nota de Clareza' (Excelente, Bom, A Melhorar) para o anúncio que você criou.
+            URL para Análise: "${productUrl}"
 
-            URL do Produto para Análise:
-            ---
-            "${productUrl}"
-            ---
+            Siga estes passos:
+            1.  **Pesquisa:** Use a busca para entender o produto, seus benefícios e público-alvo.
+            2.  **Criação:** Com base na pesquisa, crie um "Título Otimizado" e uma "Descrição Otimizada". O texto deve ser persuasivo, claro e com uma chamada para ação (CTA).
+            3.  **Sugestão de Imagem:** Descreva uma "Sugestão de Imagem" ideal para o anúncio.
+            4.  **Pontos de Destaque:** Liste os "Pontos de Destaque" da sua otimização, explicando por que as escolhas são eficazes.
+            5.  **Avaliação:** Forneça um "Nível de Persuasão" (Alto, Médio, Baixo) e uma "Nota de Clareza" (Excelente, Bom, A Melhorar).
 
-            Gere uma resposta JSON estruturada com os campos solicitados.
+            **Formato de Saída OBRIGATÓRIO:**
+            Sua resposta DEVE ser APENAS um objeto JSON válido, sem nenhum texto ou formatação antes ou depois, com a seguinte estrutura:
+            {
+              "optimizedTitle": "string",
+              "optimizedDescription": "string",
+              "improvements": ["string"],
+              "persuasionScore": "string",
+              "clarityScore": "string",
+              "imageSuggestion": "string"
+            }
         `;
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
             config: {
-                responseMimeType: "application/json",
-                responseSchema: adOptimizationSchema,
-                temperature: 0.7,
+                tools: [{googleSearch: {}}],
+                temperature: 0.2, // Lower temperature for more predictable, structured output.
             },
         });
 
-        const jsonString = response.text.trim();
-        const result = JSON.parse(jsonString);
+        const result = extractAndParseJson(response.text);
 
+        const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+        const sources: GroundingSource[] = groundingMetadata?.groundingChunks
+            ?.map((chunk: any) => chunk.web && { uri: chunk.web.uri, title: chunk.web.title })
+            .filter((source: any): source is GroundingSource => source && source.uri) || [];
+
+        // Validate the structure of the parsed JSON
         if (
             result && 
             typeof result.optimizedTitle === 'string' &&
@@ -82,13 +88,23 @@ export const optimizeAd = async (productUrl: string): Promise<OptimizedAdRespons
             typeof result.clarityScore === 'string' &&
             typeof result.imageSuggestion === 'string'
         ) {
-             return result as OptimizedAdResponse;
+             return { ...result, sources };
         } else {
-            throw new Error("Resposta da API em formato inesperado.");
+            console.error("JSON recebido da API não possui a estrutura esperada.", result);
+            throw new Error("A resposta da IA, embora seja um JSON válido, não contém os campos esperados.");
         }
 
     } catch (error) {
-        console.error("Erro ao otimizar anúncio:", error);
-        throw new Error("Não foi possível otimizar o anúncio. Tente novamente mais tarde.");
+        console.error("Erro ao chamar a API Gemini:", error);
+        if (error instanceof Error) {
+            // Re-throw specific, user-friendly messages
+            if (error.message.includes("JSON")) {
+                 throw new Error("A resposta da IA não estava no formato JSON esperado e não pôde ser lida.");
+            }
+            // For other errors, provide a general message
+            throw new Error("Não foi possível otimizar o anúncio. Verifique a URL ou a configuração da sua chave de API.");
+        }
+        // Fallback for non-Error objects
+        throw new Error("Ocorreu um erro desconhecido ao contatar o serviço de IA.");
     }
 };

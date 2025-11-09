@@ -33,7 +33,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ optimizedAd }) => {
   );
   
   const getScoreColor = (score: string) => {
-    switch(score.toLowerCase()) {
+    switch(score?.toLowerCase()) {
         case 'alto':
         case 'excelente':
             return 'text-green-400';
@@ -111,6 +111,31 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ optimizedAd }) => {
           ))}
         </ul>
       </div>
+
+      {/* Sources */}
+      {optimizedAd.sources && optimizedAd.sources.length > 0 && (
+        <div className="mt-8 bg-slate-800/50 p-6 rounded-lg border border-slate-700">
+          <h3 className="text-lg font-semibold mb-4 text-amber-300 flex items-center gap-2">
+              <LinkIcon className="w-5 h-5"/>
+              Fontes Utilizadas na Análise
+          </h3>
+          <ul className="space-y-2">
+            {optimizedAd.sources.map((source, index) => (
+              <li key={index}>
+                <a 
+                  href={source.uri} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-cyan-400 hover:text-cyan-300 hover:underline transition-colors break-all"
+                  title={source.title}
+                >
+                  {source.title || source.uri}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };
